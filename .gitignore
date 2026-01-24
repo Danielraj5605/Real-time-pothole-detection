@@ -45,13 +45,13 @@ wandb/
 weights/*.pt
 weights/*.onnx
 
-# Dataset (too large for git - use Git LFS or external storage)
+# Dataset splits (will be generated during training)
 Datasets/train/
 Datasets/val/
 Datasets/test/
-# Keep the structure but ignore the actual data
-Datasets/images/*.jpg
-Datasets/labels/*.txt
+
+# Keep original images and labels - these are essential
+# Note: Using Git LFS for large files
 
 # Temporary files
 *.log
