@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# YOLOv5
+yolov5/
+runs/
+wandb/
+
+# Model weights (too large for git)
+*.pt
+*.pth
+*.onnx
+*.torchscript
+weights/*.pt
+weights/*.onnx
+
+# Dataset (too large for git - use Git LFS or external storage)
+Datasets/train/
+Datasets/val/
+Datasets/test/
+# Keep the structure but ignore the actual data
+Datasets/images/*.jpg
+Datasets/labels/*.txt
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Test results
+test_results/
+*.png
+*.jpg
+*.jpeg
+!docs/*.png
+!docs/*.jpg
+
+# Environment variables
+.env
+.env.local
+
+# Cache
+.cache/
+*.cache
