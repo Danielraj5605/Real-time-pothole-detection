@@ -213,13 +213,14 @@ def create_dataset_yaml():
 
 def clone_yolov5():
     """Clone YOLOv5 repository if not exists"""
+    import subprocess
     yolov5_dir = Config.PROJECT_ROOT / 'yolov5'
     
     if not yolov5_dir.exists():
         print("Cloning YOLOv5 repository...")
-        os.system(f'git clone https://github.com/ultralytics/yolov5.git {yolov5_dir}')
+        subprocess.run(['git', 'clone', 'https://github.com/ultralytics/yolov5.git', str(yolov5_dir)])
         print("Installing YOLOv5 requirements...")
-        os.system(f'pip install -r {yolov5_dir}/requirements.txt')
+        subprocess.run(['pip', 'install', '-r', str(yolov5_dir / 'requirements.txt')])
     else:
         print("YOLOv5 repository already exists.")
     
@@ -236,7 +237,9 @@ def train_model(dataset_yaml_path):
     
     yolov5_dir = clone_yolov5()
     
-    # Training command
+    # Training command - use subprocess for better path handling
+    import subprocess
+    
     train_cmd = [
         'python', str(yolov5_dir / 'train.py'),
         '--img', str(Config.IMG_SIZE),
@@ -257,12 +260,12 @@ def train_model(dataset_yaml_path):
     
     # Execute training
     print("\nTraining Command:")
-    print(' '.join(train_cmd))
+    print(' '.join(f'"{arg}"' if ' ' in str(arg) else str(arg) for arg in train_cmd))
     print("\nStarting training... This may take several hours.")
     print("=" * 70)
     print()
     
-    os.system(' '.join(train_cmd))
+    subprocess.run(train_cmd)
     
     print("\n" + "=" * 70)
     print("TRAINING COMPLETE!")
@@ -282,6 +285,8 @@ def optimize_for_raspberry_pi(weights_path):
     
     yolov5_dir = Config.PROJECT_ROOT / 'yolov5'
     
+    import subprocess
+    
     # Export to TorchScript
     print("\n1. Exporting to TorchScript...")
     export_cmd = [
@@ -291,7 +296,7 @@ def optimize_for_raspberry_pi(weights_path):
         '--device', 'cpu',  # Export for CPU (Raspberry Pi)
         '--simplify',
     ]
-    os.system(' '.join(export_cmd))
+    subprocess.run(export_cmd)
     
     # Export to ONNX (better for edge devices)
     print("\n2. Exporting to ONNX...")
@@ -302,7 +307,7 @@ def optimize_for_raspberry_pi(weights_path):
         '--device', 'cpu',
         '--simplify',
     ]
-    os.system(' '.join(export_cmd))
+    subprocess.run(export_cmd)
     
     print("\nModel optimization complete!")
     print("Optimized models saved in the same directory as weights.")

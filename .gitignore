@@ -58,6 +58,13 @@ Datasets/test/
 *.tmp
 *.bak
 
+# CV Detection Results
+cv_results/
+test_results/
+
+# Dataset YAML (generated during runtime)
+Datasets/pothole_dataset.yaml
+
 # OS
 .DS_Store
 Thumbs.db
