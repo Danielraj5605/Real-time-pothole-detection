@@ -1,8 +1,12 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -20,71 +24,106 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-env/
-ENV/
+# PyInstaller
+*.manifest
+*.spec
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-# YOLOv5
-yolov5/
-runs/
-wandb/
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
 
-# Model weights (too large for git)
-*.pt
-*.pth
-*.onnx
-*.torchscript
-weights/*.pt
-weights/*.onnx
+# Translations
+*.mo
+*.pot
 
-# Dataset splits (will be generated during training)
-Datasets/train/
-Datasets/val/
-Datasets/test/
-
-# Keep original images and labels - these are essential
-# Note: Using Git LFS for large files
-
-# Temporary files
+# Django stuff:
 *.log
-*.tmp
-*.bak
+local_settings.py
 
-# CV Detection Results
-cv_results/
-test_results/
+# Flask stuff:
+instance/
+.webassets-cache
 
-# Dataset YAML (generated during runtime)
-Datasets/pothole_dataset.yaml
+# Scrapy stuff:
+.scrapy
 
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Test results
-test_results/
-*.png
-*.jpg
-*.jpeg
-!docs/*.png
-!docs/*.jpg
+# pyenv
+.python-version
 
-# Environment variables
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
 .env
-.env.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Cache
-.cache/
-*.cache
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+models/weights/*.pt
+models/yolo_training/
+runs/
+results/
+logs/*.log
+logs/*.db
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+
+# Temporary
+*.tmp
+*.temp
+temp/

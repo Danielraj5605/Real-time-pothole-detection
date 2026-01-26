@@ -1,23 +1,22 @@
-# Real-Time Pothole Detection System
+# Multimodal Pothole Detection System
 
-An integrated multi-sensor embedded system for real-time pothole detection, severity classification, and driver alerting using Raspberry Pi.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/YOLOv8-Ultralytics-green.svg" alt="YOLOv8">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+</p>
 
-## 🎯 Project Overview
+A production-grade **offline multimodal ML pipeline** for pothole detection and severity classification. Combines computer vision (YOLOv8) with accelerometer signal processing for robust, real-world pothole detection.
 
-This project implements a **Hierarchical Multimodal Edge Fusion Architecture** that combines:
-- **Camera-based Vision** (YOLOv5) for visual pothole detection
-- **Accelerometer Data** (MPU6050) for vibration sensing
-- **GPS Tagging** (NEO-6M) for geo-location
-- **Real-time Alerts** for approaching vehicles
+---
 
-### Key Features
+## 🎯 Features
 
-✅ **Multi-sensor Fusion**: Combines camera and accelerometer data for robust detection  
-✅ **Severity Classification**: Categorizes potholes as Low, Medium, or High severity  
-✅ **GPS Geo-tagging**: Records exact location of detected potholes  
-✅ **Real-time Alerts**: Warns drivers of high-severity potholes ahead  
-✅ **Edge Computing**: Runs on Raspberry Pi 4 for practical deployment  
-✅ **Low Cost**: Uses affordable, readily available components  
+- **Vision Pipeline**: YOLOv8-based pothole detection with configurable models
+- **Accelerometer Pipeline**: Signal processing with sliding windows and severity classification
+- **Multimodal Fusion**: Rule-based and ML-based fusion strategies
+- **Complete Offline System**: No internet required for inference
+- **Production Ready**: Modular architecture, comprehensive logging, and configuration management
 
 ---
 
@@ -25,20 +24,48 @@ This project implements a **Hierarchical Multimodal Edge Fusion Architecture** t
 
 ```
 Real-time-pothole-detection/
-├── Datasets/
-│   ├── images/          # Raw images (2009 images)
-│   ├── labels/          # YOLO format annotations
-│   ├── train/           # Training split
-│   ├── val/             # Validation split
-│   └── test/            # Test split
-├── runs/                # Training runs and logs
-├── weights/             # Trained model weights
-├── yolov5/              # YOLOv5 repository (auto-cloned)
-├── train_yolov5.py      # Main training script
-├── test_model.py        # Model testing and evaluation
-├── prepare_labels.py    # Label validation and visualization
-├── requirements.txt     # Python dependencies
-└── README.md            # This file
+│
+├── config/
+│   └── config.yaml              # Master configuration file
+│
+├── src/
+│   ├── __init__.py
+│   │
+│   ├── vision/                  # Computer vision pipeline
+│   │   ├── detector.py          # YOLOv8 inference
+│   │   ├── trainer.py           # Model training
+│   │   └── features.py          # Feature extraction
+│   │
+│   ├── accelerometer/           # Accelerometer pipeline
+│   │   ├── processor.py         # Signal processing
+│   │   ├── features.py          # Feature extraction
+│   │   └── classifier.py        # Severity classification
+│   │
+│   ├── fusion/                  # Multimodal fusion
+│   │   ├── engine.py            # Fusion engine
+│   │   ├── rules.py             # Rule-based fusion
+│   │   └── alerts.py            # Alert management
+│   │
+│   └── utils/                   # Shared utilities
+│       ├── config_loader.py     # Configuration management
+│       └── logger.py            # Logging utilities
+│
+├── scripts/
+│   ├── train.py                 # Training script
+│   ├── prepare_dataset.py       # Dataset preparation
+│   └── evaluate.py              # Evaluation script
+│
+├── Datasets/                    # Dataset storage
+│   ├── Pothole_Image_Data/      # Pothole images
+│   ├── Pothole/                 # Accelerometer CSV data
+│   └── images/                  # Additional images
+│
+├── models/                      # Trained models
+│   └── weights/                 # Model weights
+│
+├── demo.py                      # Demo application
+├── requirements.txt             # Dependencies
+└── README.md                    # This file
 ```
 
 ---
@@ -48,360 +75,264 @@ Real-time-pothole-detection/
 ### 1. Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd "d:\Personal Projects\Real-time-pothole-detection"
+# Clone the repository
+git clone https://github.com/yourusername/Real-time-pothole-detection.git
+cd Real-time-pothole-detection
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+.\venv\Scripts\activate   # Windows
 
 # Install dependencies
 pip install -r requirements.txt
-
-# The YOLOv5 repository will be auto-cloned during training
 ```
 
-### 2. Prepare Your Dataset
-
-**Option A: If you already have YOLO format labels**
+### 2. Run Demo
 
 ```bash
-# Validate your labels
-python prepare_labels.py --mode validate
-
-# Visualize some samples
-python prepare_labels.py --mode visualize
+python demo.py
 ```
 
-**Option B: If you need to create labels**
+This will:
+- Initialize all pipelines (vision, accelerometer, fusion)
+- Run detection on sample data
+- Display results and generate visualizations
 
-1. Use annotation tools:
-   - [LabelImg](https://github.com/heartexlabs/labelImg) (Desktop)
-   - [Roboflow](https://roboflow.com/) (Web-based)
-   - [CVAT](https://www.cvat.ai/) (Advanced)
-
-2. Export in **YOLO format**
-
-3. Place labels in `Datasets/labels/` directory
-
-4. Label format example:
-   ```
-   # <class_id> <x_center> <y_center> <width> <height>
-   0 0.5 0.5 0.3 0.2    # Low severity pothole
-   1 0.7 0.3 0.15 0.15  # Medium severity
-   2 0.2 0.8 0.25 0.18  # High severity
-   ```
-
-### 3. Train the Model
+### 3. Train Custom Model
 
 ```bash
-# Start training
-python train_yolov5.py
-```
+# Prepare dataset
+python scripts/prepare_dataset.py
 
-**Training Configuration:**
-- Model: YOLOv5s (small, fast, suitable for Raspberry Pi)
-- Image Size: 640x640
-- Batch Size: 16 (adjust based on GPU memory)
-- Epochs: 100
-- Classes: 3 (low, medium, high severity)
-
-**Expected Training Time:**
-- With GPU (RTX 3060): ~2-3 hours
-- With CPU: ~12-24 hours
-
-### 4. Test the Model
-
-```bash
-# Test on a single image
-python test_model.py --mode single --image path/to/image.jpg
-
-# Evaluate on test set
-python test_model.py --mode test_set
-
-# Benchmark inference speed
-python test_model.py --mode benchmark
+# Train YOLOv8
+python scripts/train.py --epochs 100 --model yolov8n
 ```
 
 ---
 
-## 📊 Dataset Information
+## 📊 Pipelines
 
-- **Total Images**: 2,009
-- **Image Format**: JPG
-- **Image Sources**: 
-  - Real-world pothole images
-  - Video frame extractions
-  - Various lighting and weather conditions
+### Vision Pipeline (YOLOv8)
 
-**Data Split:**
-- Training: 70% (1,406 images)
-- Validation: 20% (402 images)
-- Test: 10% (201 images)
-
----
-
-## 🎓 Model Training Details
-
-### Architecture: YOLOv5s
-
-- **Backbone**: CSPDarknet53
-- **Neck**: PANet
-- **Head**: YOLOv5 Detection Head
-- **Parameters**: ~7.2M
-- **GFLOPs**: ~16.5
-
-### Training Hyperparameters
+Detects potholes in images using state-of-the-art object detection.
 
 ```python
-IMG_SIZE = 640
-BATCH_SIZE = 16
-EPOCHS = 100
-LEARNING_RATE = 0.01
-MOMENTUM = 0.937
-WEIGHT_DECAY = 0.0005
+from src.vision import PotholeDetector
+
+detector = PotholeDetector("models/weights/pothole_best.pt")
+detections = detector.detect("road_image.jpg")
+
+for det in detections:
+    print(f"Pothole: conf={det.confidence:.2f}, area={det.area}")
 ```
 
-### Data Augmentation
+**Features Extracted:**
+- Detection confidence
+- Bounding box area (normalized)
+- Aspect ratio
+- Number of detections
 
-- Mosaic augmentation
-- Random scaling
-- Random cropping
-- Color jittering
-- Horizontal flipping
+### Accelerometer Pipeline
 
-### Performance Metrics
+Processes accelerometer data with sliding windows for severity classification.
 
-After training, check:
-- **mAP@0.5**: Mean Average Precision at IoU 0.5
-- **mAP@0.5:0.95**: Mean Average Precision at IoU 0.5 to 0.95
-- **Precision**: True positives / (True positives + False positives)
-- **Recall**: True positives / (True positives + False negatives)
+```python
+from src.accelerometer import AccelerometerProcessor, AccelFeatureExtractor
+
+processor = AccelerometerProcessor(window_size=50)
+extractor = AccelFeatureExtractor()
+
+for window in processor.process_file("trip_sensors.csv"):
+    features = extractor.extract(window)
+    print(f"Peak: {features.peak_acceleration:.2f}g, RMS: {features.rms_vibration:.2f}g")
+```
+
+**Features Extracted:**
+- Peak acceleration (X, Y, Z, magnitude)
+- RMS vibration
+- Crest factor
+- Zero crossing rate
+
+### Multimodal Fusion
+
+Combines vision and accelerometer features for robust detection.
+
+```python
+from src.fusion import FusionEngine
+
+engine = FusionEngine(method="rule_based")
+result = engine.fuse(vision_features, accel_features)
+
+if result.pothole_detected:
+    print(f"Severity: {result.severity} ({result.confidence:.0%})")
+```
+
+**Fusion Strategies:**
+- **Rule-based**: Configurable thresholds and logic
+- **Weighted Average**: Simple weighted combination
+- **ML-based**: Trained classifier (optional)
 
 ---
 
-## 🔧 Hardware Requirements
+## ⚙️ Configuration
 
-### For Training
+All settings are centralized in `config/config.yaml`:
 
-**Minimum:**
-- CPU: Intel i5 or equivalent
-- RAM: 8GB
-- Storage: 20GB free space
-- GPU: Optional but recommended (NVIDIA with CUDA support)
+```yaml
+vision:
+  model_type: "yolov8n"
+  confidence_threshold: 0.25
+  training:
+    epochs: 100
+    batch_size: 16
 
-**Recommended:**
-- CPU: Intel i7/AMD Ryzen 7 or better
-- RAM: 16GB+
-- GPU: NVIDIA RTX 3060 or better
-- Storage: SSD with 50GB+ free space
+accelerometer:
+  window_size_samples: 50
+  apply_lowpass_filter: true
 
-### For Deployment (Raspberry Pi)
-
-**Hardware:**
-- Raspberry Pi 4 (4GB or 8GB RAM)
-- Camera Module (Pi Camera v2 or USB webcam)
-- MPU6050 Accelerometer/Gyroscope
-- NEO-6M GPS Module
-- MicroSD Card (32GB+ Class 10)
-- Power Supply (5V 3A)
-- Optional: Buzzer/LED for alerts
-
----
-
-## 📈 Expected Results
-
-### Detection Performance
-
-- **Accuracy**: 85-95% (depends on dataset quality)
-- **Inference Speed**:
-  - Desktop GPU: 30-60 FPS
-  - Raspberry Pi 4: 2-5 FPS (YOLOv5s)
-  - Raspberry Pi 4: 5-10 FPS (YOLOv5n)
-
-### Severity Classification
-
-The model classifies potholes into three categories:
-
-| Severity | Description | Visual Indicator |
-|----------|-------------|------------------|
-| **Low** | Minor surface damage | 🟢 Green |
-| **Medium** | Moderate damage, caution needed | 🟠 Orange |
-| **High** | Severe damage, immediate attention | 🔴 Red |
-
----
-
-## 🎯 Next Steps
-
-### 1. Model Optimization for Raspberry Pi
-
-```bash
-# After training, optimize the model
-python train_yolov5.py
-# Follow prompts to optimize for edge deployment
-```
-
-This will create:
-- `best.torchscript` - TorchScript format
-- `best.onnx` - ONNX format (recommended for Pi)
-
-### 2. Raspberry Pi Deployment
-
-1. **Install Dependencies on Pi:**
-   ```bash
-   pip install opencv-python-headless
-   pip install onnxruntime
-   pip install numpy
-   ```
-
-2. **Transfer Model:**
-   ```bash
-   scp weights/best.onnx pi@raspberrypi.local:~/pothole_detection/
-   ```
-
-3. **Run Inference:**
-   - Use the optimized ONNX model
-   - Integrate with camera feed
-   - Add GPS tagging
-   - Implement alert system
-
-### 3. System Integration
-
-- Integrate accelerometer data (MPU6050)
-- Add GPS module (NEO-6M)
-- Implement sensor fusion logic
-- Create local alert server
-- Test complete system
-
----
-
-## 📝 Usage Examples
-
-### Training
-
-```bash
-# Basic training
-python train_yolov5.py
-
-# Custom configuration (edit Config class in script)
-# - Change MODEL_SIZE to 'yolov5n' for faster inference
-# - Adjust BATCH_SIZE based on GPU memory
-# - Modify EPOCHS for longer/shorter training
-```
-
-### Testing
-
-```bash
-# Single image inference
-python test_model.py --mode single --image test.jpg
-
-# Batch evaluation
-python test_model.py --mode test_set --test_dir Datasets/test/images
-
-# Speed benchmark
-python test_model.py --mode benchmark
-```
-
-### Label Validation
-
-```bash
-# Validate all labels
-python prepare_labels.py --mode validate
-
-# Visualize specific image
-python prepare_labels.py --mode visualize --image image_name.jpg
-
-# Check label format
-python prepare_labels.py --mode check --label_file path/to/label.txt
-
-# Show sample format
-python prepare_labels.py --mode sample
+fusion:
+  method: "rule_based"
+  vision_weight: 0.6
+  accel_weight: 0.4
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 📈 Model Training
 
-### Common Issues
+### Prepare Dataset
 
-**1. CUDA Out of Memory**
 ```bash
-# Reduce batch size in train_yolov5.py
-BATCH_SIZE = 8  # or 4
+python scripts/prepare_dataset.py --val-split 0.2
 ```
 
-**2. No Labels Found**
+### Train YOLOv8
+
 ```bash
-# Check label format and location
-python prepare_labels.py --mode validate
+python scripts/train.py --model yolov8n --epochs 100 --batch 16
 ```
 
-**3. Slow Training**
-```bash
-# Use smaller model
-MODEL_SIZE = "yolov5n"  # Nano version
-```
+### Train Severity Classifier
 
-**4. Import Errors**
-```bash
-# Reinstall dependencies
-pip install -r requirements.txt --upgrade
+The severity classifier can be trained on synthetic data (demo) or real labeled data:
+
+```python
+from src.accelerometer import SeverityClassifier
+
+classifier = SeverityClassifier()
+classifier.train_synthetic(n_samples_per_class=500)
+classifier.save("models/weights/severity_classifier.pkl")
 ```
 
 ---
 
-## 📚 References
+## 🔬 Accelerometer Data Format
 
-### YOLOv5
-- [Ultralytics YOLOv5](https://github.com/ultralytics/yolov5)
-- [YOLOv5 Documentation](https://docs.ultralytics.com/)
+Expected CSV format for sensor data:
 
-### Research Papers
-- "You Only Look Once: Unified, Real-Time Object Detection" (YOLO)
-- "YOLOv5: Improvements and Applications"
+```csv
+timestamp,latitude,longitude,speed,accelerometerX,accelerometerY,accelerometerZ
+1492638964.5,40.447444,-79.944188,0.0,0.016998,-0.962234,0.203887
+```
 
-### Datasets
-- Custom pothole dataset (2,009 images)
-- Various road conditions and lighting
+Pothole labels format:
+
+```csv
+timestamp
+1492639065.7
+1492639090.8
+```
 
 ---
 
-## 🤝 Contributing
+## 📊 Severity Levels
 
-Contributions are welcome! Areas for improvement:
-- Better data augmentation strategies
-- Multi-modal sensor fusion algorithms
-- Real-time alert optimization
-- Mobile app integration
-- Cloud-based pothole mapping
+| Severity | Peak (g) | RMS (g) | Description |
+|----------|----------|---------|-------------|
+| None     | < 0.25   | < 0.10  | Normal road |
+| Low      | 0.25-0.5 | 0.10-0.15 | Minor bump |
+| Medium   | 0.5-1.5  | 0.15-0.5 | Moderate pothole |
+| High     | > 1.5    | > 0.5   | Severe pothole |
+
+---
+
+## 🛠️ Development
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+### Code Style
+
+```bash
+black src/ --line-length 88
+flake8 src/
+```
+
+---
+
+## 📚 API Reference
+
+### PotholeDetector
+
+```python
+class PotholeDetector:
+    def __init__(self, model_path, confidence_threshold=0.25)
+    def detect(self, image) -> List[Detection]
+    def detect_batch(self, images) -> List[List[Detection]]
+    def visualize(self, image, detections) -> np.ndarray
+```
+
+### FusionEngine
+
+```python
+class FusionEngine:
+    def __init__(self, method="rule_based", vision_weight=0.6)
+    def fuse(self, vision_features, accel_features) -> FusionResult
+```
+
+### AlertManager
+
+```python
+class AlertManager:
+    def __init__(self, debounce_seconds=2.0)
+    def process(self, result) -> Optional[Alert]
+    def add_callback(self, callback)
+```
+
+---
+
+## 🔮 Future Enhancements
+
+- [ ] Real-time camera integration
+- [ ] GPS-based heatmap generation
+- [ ] Cloud synchronization for fleet management
+- [ ] Mobile app integration
+- [ ] Edge deployment (Raspberry Pi, Jetson)
 
 ---
 
 ## 📄 License
 
-This project is for educational and research purposes.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## 👥 Authors
+## 🤝 Contributing
 
-Real-Time Pothole Detection System  
-Multi-Sensor Embedded System Project
+Contributions welcome! Please read the contributing guidelines first.
 
----
-
-## 🙏 Acknowledgments
-
-- YOLOv5 by Ultralytics
-- PyTorch team
-- OpenCV community
-- Raspberry Pi Foundation
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ---
 
-## 📞 Support
+## 📧 Contact
 
-For issues and questions:
-1. Check the troubleshooting section
-2. Review training logs in `runs/` directory
-3. Validate dataset using `prepare_labels.py`
-
----
-
-**Happy Training! 🚀**
+For questions or issues, please open a GitHub issue or contact the maintainers.
