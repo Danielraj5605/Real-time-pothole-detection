@@ -3,7 +3,21 @@ Fusion Engine Module
 
 Core multimodal fusion engine that combines vision and accelerometer
 pipelines for robust pothole detection and severity classification.
+
+⚠️ DEPRECATED: This module is part of the legacy architecture.
+Please use the new architecture instead:
+- src/domain/services/fusion_service.py
+- src/application/services/detection_service.py
+
+This file is kept for backward compatibility and migration reference only.
 """
+
+import warnings
+warnings.warn(
+    "src.fusion.engine is deprecated. Use src.domain.services.fusion_service instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import numpy as np
 from typing import Dict, Any, Optional, List, Tuple

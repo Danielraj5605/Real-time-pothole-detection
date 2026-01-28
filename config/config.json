@@ -1,0 +1,271 @@
+{
+  "project": {
+    "name": "Multimodal Pothole Detection System",
+    "version": "1.0.0",
+    "description": "Real-time pothole detection using vision and accelerometer fusion"
+  },
+  
+  "paths": {
+    "data_root": "Datasets",
+    "image_data": "Datasets/images",
+    "pothole_image_data": "Datasets/Pothole_Image_Data",
+    "accel_data": "Datasets/Pothole",
+    "models_dir": "models",
+    "weights_dir": "models/weights",
+    "logs_dir": "logs",
+    "results_dir": "results",
+    "yolo_dataset_yaml": "Datasets/pothole_dataset.yaml",
+    "yolo_train_results": "models/yolo_training",
+    "database": "data/database/potholes.db"
+  },
+  
+  "vision": {
+    "model_type": "yolov8n",
+    "pretrained_weights": "yolov8n.pt",
+    "trained_weights": "models/weights/pothole_yolov8n_best.pt",
+    "training": {
+      "epochs": 100,
+      "batch_size": 16,
+      "image_size": 640,
+      "patience": 20,
+      "optimizer": "auto",
+      "lr0": 0.01,
+      "lrf": 0.01,
+      "momentum": 0.937,
+      "weight_decay": 0.0005,
+      "warmup_epochs": 3.0,
+      "augment": true
+    },
+    "inference": {
+      "confidence_threshold": 0.25,
+      "iou_threshold": 0.45,
+      "max_detections": 100
+    },
+    "features": {
+      "extract_confidence": true,
+      "extract_bbox_area": true,
+      "extract_aspect_ratio": true,
+      "normalize_bbox_area": true
+    }
+  },
+  
+  "accelerometer": {
+    "sensor": {
+      "sample_rate_hz": 50,
+      "accelerometer_range_g": 2,
+      "i2c_address": "0x68",
+      "i2c_bus": 1
+    },
+    "windowing": {
+      "window_size_samples": 50,
+      "window_overlap_ratio": 0.5,
+      "min_window_samples": 25
+    },
+    "signal_processing": {
+      "apply_lowpass_filter": true,
+      "lowpass_cutoff_hz": 10.0,
+      "filter_order": 4,
+      "remove_baseline": true,
+      "baseline_method": "mean"
+    },
+    "features": [
+      "peak_acceleration",
+      "rms_vibration",
+      "peak_to_peak",
+      "mean_acceleration",
+      "std_acceleration",
+      "crest_factor",
+      "zero_crossing_rate"
+    ],
+    "classifier": {
+      "model_type": "random_forest",
+      "trained_model": "models/weights/severity_classifier.pkl",
+      "scaler": "models/weights/severity_scaler.pkl",
+      "random_forest": {
+        "n_estimators": 100,
+        "max_depth": 10,
+        "min_samples_split": 5,
+        "min_samples_leaf": 2,
+        "random_state": 42
+      }
+    },
+    "severity_thresholds": {
+      "low": {
+        "max_peak_g": 0.5,
+        "max_rms_g": 0.15
+      },
+      "medium": {
+        "max_peak_g": 1.5,
+        "max_rms_g": 0.5
+      },
+      "high": {
+        "min_peak_g": 1.5,
+        "min_rms_g": 0.5
+      }
+    }
+  },
+  
+  "gps": {
+    "sensor": {
+      "port": "/dev/ttyAMA0",
+      "baudrate": 9600,
+      "timeout": 1.0
+    },
+    "simulation_mode": true,
+    "default_location": {
+      "latitude": 40.4533,
+      "longitude": -79.9463
+    },
+    "jitter_enabled": true,
+    "jitter_radius_meters": 5.0
+  },
+  
+  "fusion": {
+    "method": "rule_based",
+    "rule_based": {
+      "vision_confidence_threshold": 0.5,
+      "accel_peak_threshold": 0.3,
+      "accel_rms_threshold": 0.15,
+      "vision_weight": 0.6,
+      "accel_weight": 0.4,
+      "combined_detection_threshold": 0.5,
+      "severity_rules": [
+        {
+          "name": "high_impact",
+          "condition": "accel_peak > 2.0 or accel_rms > 0.8",
+          "severity": "high"
+        },
+        {
+          "name": "large_visual",
+          "condition": "bbox_area_ratio > 0.1 and vision_conf > 0.8",
+          "severity": "high"
+        }
+      ]
+    },
+    "ml_based": {
+      "model_type": "random_forest",
+      "trained_model": "models/weights/fusion_classifier.pkl",
+      "features": [
+        "vision_confidence",
+        "bbox_area_normalized",
+        "bbox_aspect_ratio",
+        "accel_peak",
+        "accel_rms",
+        "accel_peak_to_peak"
+      ]
+    }
+  },
+  
+  "detection": {
+    "min_confidence": 0.5,
+    "accel_threshold": 1.5,
+    "frame_rate": 15,
+    "vision_weight": 0.6,
+    "accel_weight": 0.4,
+    "fusion_threshold": 0.5
+  },
+  
+  "severity": {
+    "high": {
+      "accel_threshold": 2.5,
+      "confidence_threshold": 0.7,
+      "bbox_threshold": 10000
+    },
+    "medium": {
+      "accel_threshold": 1.8,
+      "confidence_threshold": 0.6,
+      "bbox_threshold": 5000
+    }
+  },
+  
+  "alerts": {
+    "enabled": true,
+    "max_distance_m": 200,
+    "channels": {
+      "console": {
+        "enabled": true,
+        "show_severity_color": true
+      },
+      "buzzer": {
+        "enabled": false,
+        "gpio_pin": 17
+      },
+      "led": {
+        "enabled": false,
+        "gpio_pin": 27
+      },
+      "tts": {
+        "enabled": false,
+        "engine": "pyttsx3"
+      }
+    },
+    "debounce": {
+      "enabled": true,
+      "window_seconds": 2.0,
+      "min_distance_meters": 5.0
+    },
+    "proximity_thresholds": {
+      "high": 100,
+      "medium": 50,
+      "low": 20
+    }
+  },
+  
+  "persistence": {
+    "type": "sqlite",
+    "database_path": "data/database/potholes.db",
+    "auto_commit": true,
+    "create_tables": true
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file_logging": true,
+    "log_file": "logs/pothole_detection.log",
+    "max_file_size_mb": 10,
+    "backup_count": 5,
+    "event_database": {
+      "type": "sqlite",
+      "path": "logs/pothole_events.db"
+    }
+  },
+  
+  "api": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 8000,
+    "reload": false,
+    "cors_enabled": true,
+    "cors_origins": ["*"]
+  },
+  
+  "websocket": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 8001
+  },
+  
+  "demo": {
+    "sample_image": "Datasets/images/vlcsnap-00001.jpg",
+    "sample_accel_csv": "Datasets/Pothole/trip1_sensors.csv",
+    "sample_pothole_csv": "Datasets/Pothole/trip1_potholes.csv",
+    "visualization": {
+      "show_detections": true,
+      "save_visualizations": true,
+      "output_dir": "results/demo_outputs"
+    },
+    "continuous_mode": false,
+    "frame_delay_ms": 100
+  },
+  
+  "hardware": {
+    "mode": "mock",
+    "camera": {
+      "device_id": 0,
+      "width": 640,
+      "height": 480,
+      "fps": 30
+    }
+  }
+}

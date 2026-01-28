@@ -2,7 +2,20 @@
 Rule-Based Fusion Module
 
 Configurable rule-based fusion logic for pothole detection.
+
+⚠️ DEPRECATED: This module is part of the legacy architecture.
+Please use the new architecture instead:
+- src/domain/services/fusion_service.py
+
+This file is kept for backward compatibility and migration reference only.
 """
+
+import warnings
+warnings.warn(
+    "src.fusion.rules is deprecated. Use src.domain.services.fusion_service instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass

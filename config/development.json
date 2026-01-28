@@ -1,0 +1,16 @@
+{
+  "environment": "development",
+  "debug": true,
+  "hardware": {
+    "mode": "mock"
+  },
+  "api": {
+    "enabled": false
+  },
+  "websocket": {
+    "enabled": false
+  },
+  "logging": {
+    "level": "DEBUG"
+  }
+}

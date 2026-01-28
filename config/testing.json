@@ -1,0 +1,20 @@
+{
+    "environment": "testing",
+    "debug": true,
+    "hardware": {
+        "mode": "mock"
+    },
+    "api": {
+        "enabled": false
+    },
+    "websocket": {
+        "enabled": false
+    },
+    "logging": {
+        "level": "WARNING",
+        "file_logging": false
+    },
+    "persistence": {
+        "database_path": ":memory:"
+    }
+}

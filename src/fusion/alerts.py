@@ -2,7 +2,21 @@
 Alert Manager Module
 
 Manages pothole detection alerts with debouncing and logging.
+
+⚠️ DEPRECATED: This module is part of the legacy architecture.
+Please use the new architecture instead:
+- src/application/services/alert_service.py
+- src/infrastructure/alerts/adapters/
+
+This file is kept for backward compatibility and migration reference only.
 """
+
+import warnings
+warnings.warn(
+    "src.fusion.alerts is deprecated. Use src.application.services.alert_service instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import time
 from typing import Dict, Any, Optional, List, Callable
