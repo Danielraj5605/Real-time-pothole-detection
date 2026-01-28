@@ -232,12 +232,26 @@ class DependencyContainer:
         
         return self._instances['reporting_service']
     
+    def get_repository(self):
+        """Get persistence repository instance"""
+        if 'repository' not in self._instances:
+            from ...infrastructure.persistence.adapters import SQLiteRepository
+            
+            db_path = self.config.get('persistence.database_path', 'data/database/potholes.db')
+            repository = SQLiteRepository(db_path)
+            # Repository auto-initializes in __init__
+            
+            self._instances['repository'] = repository
+            self.logger.info(f"Repository initialized: SQLite at {db_path}")
+        
+        return self._instances['repository']
+    
     def cleanup(self):
-        """Cleanup all resources"""
+        """Cleanup all resources (sync version)"""
         self.logger.info("Cleaning up resources...")
         
         # Cleanup sensors
-        for key in ['camera', 'accelerometer', 'gps', 'detector']:
+        for key in ['camera', 'accelerometer', 'gps', 'detector', 'repository']:
             if key in self._instances:
                 try:
                     self._instances[key].cleanup()
@@ -246,7 +260,32 @@ class DependencyContainer:
         
         # Stop event bus
         if 'event_bus' in self._instances:
-            self._instances['event_bus'].stop()
+            try:
+                self._instances['event_bus'].stop()
+            except Exception as e:
+                self.logger.error(f"Error stopping event bus: {e}")
+        
+        self._instances.clear()
+        self.logger.info("Cleanup complete")
+    
+    async def cleanup_async(self):
+        """Cleanup all resources (async version)"""
+        self.logger.info("Cleaning up resources...")
+        
+        # Cleanup sensors
+        for key in ['camera', 'accelerometer', 'gps', 'detector', 'repository']:
+            if key in self._instances:
+                try:
+                    self._instances[key].cleanup()
+                except Exception as e:
+                    self.logger.error(f"Error cleaning up {key}: {e}")
+        
+        # Stop event bus
+        if 'event_bus' in self._instances:
+            try:
+                await self._instances['event_bus'].stop()
+            except Exception as e:
+                self.logger.error(f"Error stopping event bus: {e}")
         
         self._instances.clear()
         self.logger.info("Cleanup complete")

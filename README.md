@@ -67,7 +67,31 @@ python main.py
 python demo_architecture.py
 ```
 
+### 4. 🎥 Run Live Camera Detection (NEW!)
+
+```bash
+# Run live pothole detection from camera
+python live_detection.py
+
+# Use a specific camera index
+python live_detection.py --camera 1
+
+# Use custom model with higher confidence
+python live_detection.py --model models/weights/pothole_best.pt --confidence 0.5
+
+# Run without display (headless mode)
+python live_detection.py --no-display
+
+# Save detected frames
+python live_detection.py --save
+```
+
+**Controls:**
+- Press **'q'** to quit
+- Press **'s'** to save current frame
+
 ---
+
 
 ## 📁 Project Structure (New Architecture)
 
