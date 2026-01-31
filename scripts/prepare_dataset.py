@@ -4,7 +4,7 @@ Dataset Preparation Script
 
 Prepares the pothole image dataset for YOLO training by:
 1. Splitting images into train/val sets
-2. Creating synthetic labels (for demo) or processing existing annotations
+2. Creating synthetic labels (for testing) or processing existing annotations
 3. Creating YOLO dataset configuration YAML
 
 Usage:
@@ -44,10 +44,10 @@ def create_synthetic_labels(
     class_id: int = 0
 ):
     """
-    Create synthetic YOLO labels for demo purposes.
+    Create synthetic YOLO labels for testing purposes.
     
     In production, you would use actual annotations.
-    This creates center-crop pseudo-labels for training demo.
+    This creates center-crop pseudo-labels for training.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -55,7 +55,7 @@ def create_synthetic_labels(
         # Create a synthetic label (center bounding box)
         # Format: class_id center_x center_y width height (normalized)
         
-        # Random variation for demo
+        # Random variation for testing
         cx = 0.5 + random.uniform(-0.15, 0.15)
         cy = 0.55 + random.uniform(-0.15, 0.1)  # Slightly below center
         w = 0.3 + random.uniform(-0.1, 0.2)
@@ -190,7 +190,7 @@ def main():
     # Create labels directory
     labels_dir = output_dir / "labels_temp"
     
-    # Create synthetic labels (for demo)
+    # Create synthetic labels (for testing)
     print("\n📝 Creating labels...")
     n_labels = create_synthetic_labels(all_images, labels_dir)
     print(f"   Created {n_labels} label files")

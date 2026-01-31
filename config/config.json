@@ -4,7 +4,6 @@
     "version": "1.0.0",
     "description": "Real-time pothole detection using vision and accelerometer fusion"
   },
-  
   "paths": {
     "data_root": "Datasets",
     "image_data": "Datasets/images",
@@ -18,7 +17,6 @@
     "yolo_train_results": "models/yolo_training",
     "database": "data/database/potholes.db"
   },
-  
   "vision": {
     "model_type": "yolov8n",
     "pretrained_weights": "yolov8n.pt",
@@ -48,7 +46,6 @@
       "normalize_bbox_area": true
     }
   },
-  
   "accelerometer": {
     "sensor": {
       "sample_rate_hz": 50,
@@ -104,7 +101,6 @@
       }
     }
   },
-  
   "gps": {
     "sensor": {
       "port": "/dev/ttyAMA0",
@@ -119,7 +115,6 @@
     "jitter_enabled": true,
     "jitter_radius_meters": 5.0
   },
-  
   "fusion": {
     "method": "rule_based",
     "rule_based": {
@@ -155,7 +150,6 @@
       ]
     }
   },
-  
   "detection": {
     "min_confidence": 0.5,
     "accel_threshold": 1.5,
@@ -164,7 +158,6 @@
     "accel_weight": 0.4,
     "fusion_threshold": 0.5
   },
-  
   "severity": {
     "high": {
       "accel_threshold": 2.5,
@@ -177,7 +170,6 @@
       "bbox_threshold": 5000
     }
   },
-  
   "alerts": {
     "enabled": true,
     "max_distance_m": 200,
@@ -210,14 +202,12 @@
       "low": 20
     }
   },
-  
   "persistence": {
     "type": "sqlite",
     "database_path": "data/database/potholes.db",
     "auto_commit": true,
     "create_tables": true
   },
-  
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -230,22 +220,21 @@
       "path": "logs/pothole_events.db"
     }
   },
-  
   "api": {
     "enabled": false,
     "host": "0.0.0.0",
     "port": 8000,
     "reload": false,
     "cors_enabled": true,
-    "cors_origins": ["*"]
+    "cors_origins": [
+      "*"
+    ]
   },
-  
   "websocket": {
     "enabled": false,
     "host": "0.0.0.0",
     "port": 8001
   },
-  
   "demo": {
     "sample_image": "Datasets/images/vlcsnap-00001.jpg",
     "sample_accel_csv": "Datasets/Pothole/trip1_sensors.csv",
@@ -258,14 +247,57 @@
     "continuous_mode": false,
     "frame_delay_ms": 100
   },
-  
   "hardware": {
-    "mode": "mock",
+    "mode": "real",
     "camera": {
+      "type": "opencv",
       "device_id": 0,
       "width": 640,
       "height": 480,
-      "fps": 30
+      "fps": 30,
+      "warmup_frames": 10,
+      "buffer_size": 1,
+      "auto_exposure": true
+    },
+    "raspberry_pi": {
+      "enabled": false,
+      "use_picamera2": false,
+      "sensor_mode": 0
+    }
+  },
+  "live_detection": {
+    "enabled": true,
+    "model_path": "yolov8n.pt",
+    "confidence_threshold": 0.25,
+    "iou_threshold": 0.45,
+    "max_detections": 100,
+    "target_fps": 15,
+    "skip_frames": 0,
+    "processing": {
+      "resize_width": 640,
+      "resize_height": 480,
+      "use_gpu": true
+    },
+    "visualization": {
+      "enabled": true,
+      "show_fps": true,
+      "show_detections": true,
+      "show_confidence": true,
+      "bbox_color": [
+        0,
+        255,
+        0
+      ],
+      "bbox_thickness": 2,
+      "font_scale": 0.6,
+      "window_name": "Pothole Detection - Live",
+      "save_detections": false,
+      "save_path": "results/live_detections"
+    },
+    "logging": {
+      "log_detections": true,
+      "log_fps_interval": 30,
+      "log_empty_frames": false
     }
   }
 }
