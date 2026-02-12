@@ -12,14 +12,36 @@ Usage:
 
 import sys
 import argparse
+import logging
 from pathlib import Path
+from datetime import datetime
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import get_config, get_logger, setup_logger
-from src.vision import VisionTrainer
+
+def setup_logger(name: str, log_file: str = None, level: str = "INFO"):
+    """Setup logger with console and file handlers"""
+    logger = logging.getLogger(name)
+    logger.setLevel(getattr(logging, level))
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, level))
+    console_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(console_format)
+    logger.addHandler(console_handler)
+    
+    # File handler
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(getattr(logging, level))
+        file_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_format)
+        logger.addHandler(file_handler)
+    
+    return logger
 
 
 def main():
@@ -56,6 +78,10 @@ def main():
         '--resume', action='store_true',
         help='Resume training from last checkpoint'
     )
+    parser.add_argument(
+        '--device', type=str, default='',
+        help='Device to use (e.g., 0, 1, cpu). Empty string for auto-detect'
+    )
     
     args = parser.parse_args()
     
@@ -63,73 +89,150 @@ def main():
     log_dir = project_root / "logs"
     log_dir.mkdir(exist_ok=True)
     
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     logger = setup_logger(
         "training",
         level="INFO",
-        log_file=str(log_dir / "training.log")
+        log_file=str(log_dir / f"training_{timestamp}.log")
     )
     
     print("="*60)
-    print("🎯 YOLOV8 POTHOLE DETECTION TRAINING")
+    print("YOLOV8 POTHOLE DETECTION TRAINING")
     print("="*60)
     
     # Validate dataset
     data_yaml = project_root / args.data
     if not data_yaml.exists():
-        print(f"\n❌ Dataset config not found: {data_yaml}")
-        print("\n💡 Run 'python scripts/prepare_dataset.py' first!")
+        print(f"\n[ERROR] Dataset config not found: {data_yaml}")
+        print("\n[TIP] Run 'python scripts/prepare_dataset.py' first!")
         return 1
     
-    print(f"\n📊 Dataset: {data_yaml}")
-    print(f"🔧 Model: {args.model}")
-    print(f"📈 Epochs: {args.epochs}")
-    print(f"📦 Batch size: {args.batch}")
-    print(f"🖼️  Image size: {args.imgsz}")
+    print(f"\nDataset: {data_yaml}")
+    print(f"Model: {args.model}")
+    print(f"Epochs: {args.epochs}")
+    print(f"Batch size: {args.batch}")
+    print(f"Image size: {args.imgsz}")
     
-    # Initialize trainer
-    print("\n🚀 Initializing trainer...")
-    trainer = VisionTrainer(model_type=args.model)
+    # Import YOLO
+    try:
+        from ultralytics import YOLO
+        print("\n[OK] Ultralytics YOLO imported successfully")
+    except ImportError as e:
+        print(f"\n[ERROR] Failed to import YOLO: {e}")
+        print("[TIP] Install with: pip install ultralytics")
+        return 1
     
-    # Print model info
-    info = trainer.get_model_info()
-    print(f"   Parameters: {info['parameters']:,}")
+    # Initialize model
+    print(f"\nInitializing {args.model} model...")
+    try:
+        # Check if we have a pretrained base model
+        base_model_path = project_root / f"{args.model}.pt"
+        if base_model_path.exists():
+            print(f"   Loading from: {base_model_path}")
+            model = YOLO(str(base_model_path))
+        else:
+            print(f"   Downloading pretrained {args.model} weights...")
+            model = YOLO(f"{args.model}.pt")
+        
+        # Print model info
+        print(f"   Model loaded successfully!")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize model: {e}")
+        print(f"\n[ERROR] Model initialization failed: {e}")
+        return 1
+    
+    # Setup training directory
+    training_dir = project_root / "models" / "yolo_training"
+    training_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate run name if not provided
+    if args.name is None:
+        args.name = f"pothole_{args.model}_{timestamp}"
     
     # Train
-    print("\n🏋️ Starting training...")
+    print("\nStarting training...")
     print("-"*60)
+    logger.info(f"Training started: {args.name}")
     
     try:
-        metrics = trainer.train(
-            data_yaml=str(data_yaml),
+        results = model.train(
+            data=str(data_yaml),
             epochs=args.epochs,
-            batch_size=args.batch,
-            image_size=args.imgsz,
-            project=str(project_root / "models/yolo_training"),
+            batch=args.batch,
+            imgsz=args.imgsz,
+            project=str(training_dir),
             name=args.name,
-            resume=args.resume
+            resume=args.resume,
+            device=args.device if args.device else None,
+            verbose=True,
+            # Training hyperparameters
+            patience=50,  # Early stopping patience
+            save=True,
+            save_period=10,  # Save checkpoint every 10 epochs
+            # Augmentation
+            hsv_h=0.015,  # Image HSV-Hue augmentation
+            hsv_s=0.7,    # Image HSV-Saturation augmentation
+            hsv_v=0.4,    # Image HSV-Value augmentation
+            degrees=0.0,  # Image rotation (+/- deg)
+            translate=0.1,  # Image translation (+/- fraction)
+            scale=0.5,    # Image scale (+/- gain)
+            shear=0.0,    # Image shear (+/- deg)
+            perspective=0.0,  # Image perspective (+/- fraction)
+            flipud=0.0,   # Image flip up-down (probability)
+            fliplr=0.5,   # Image flip left-right (probability)
+            mosaic=1.0,   # Image mosaic (probability)
         )
         
         print("-"*60)
-        print("\n✅ Training Complete!")
-        print(f"\n📊 Results:")
-        print(f"   Train Accuracy: {metrics.get('train_accuracy', 'N/A')}")
-        print(f"   Test Accuracy: {metrics.get('test_accuracy', 'N/A')}")
+        print("\n[SUCCESS] Training Complete!")
+        
+        # Get metrics
+        if hasattr(results, 'results_dict'):
+            metrics = results.results_dict
+            print(f"\nFinal Metrics:")
+            if 'metrics/mAP50(B)' in metrics:
+                print(f"   mAP@0.5: {metrics['metrics/mAP50(B)']:.4f}")
+            if 'metrics/mAP50-95(B)' in metrics:
+                print(f"   mAP@0.5:0.95: {metrics['metrics/mAP50-95(B)']:.4f}")
         
         # Export best weights
-        weights_dir = project_root / "models/weights"
+        weights_dir = project_root / "models" / "weights"
         weights_dir.mkdir(parents=True, exist_ok=True)
         
-        export_path = weights_dir / f"pothole_{args.model}_best.pt"
-        trainer.export(str(export_path))
+        # Find the best weights from training
+        best_weights = training_dir / args.name / "weights" / "best.pt"
+        if best_weights.exists():
+            export_path = weights_dir / f"pothole_{args.model}_best.pt"
+            
+            # Copy the best weights
+            import shutil
+            shutil.copy(str(best_weights), str(export_path))
+            
+            print(f"\nBest weights saved to: {export_path}")
+            print(f"   Original weights: {best_weights}")
+            
+            logger.info(f"Training completed successfully. Best weights: {export_path}")
+        else:
+            print(f"\n[WARNING] Best weights not found at {best_weights}")
+            print(f"   Check training directory: {training_dir / args.name}")
         
-        print(f"\n💾 Best weights: {export_path}")
+        # Print training results location
+        print(f"\nTraining results: {training_dir / args.name}")
+        print(f"   - Weights: {training_dir / args.name / 'weights'}")
+        print(f"   - Plots: {training_dir / args.name}")
         
     except Exception as e:
-        logger.error(f"Training failed: {e}")
-        print(f"\n❌ Training failed: {e}")
+        logger.error(f"Training failed: {e}", exc_info=True)
+        print(f"\n[ERROR] Training failed: {e}")
         return 1
     
-    print("\n🎉 Done!")
+    print("\nDone!")
+    print("\nNext steps:")
+    print(f"   1. Review training plots in: {training_dir / args.name}")
+    print(f"   2. Test the model: python pothole_detector.py --test --model models/weights/pothole_{args.model}_best.pt")
+    print(f"   3. Run live detection: python pothole_detector.py --model models/weights/pothole_{args.model}_best.pt")
+    
     return 0
 
 

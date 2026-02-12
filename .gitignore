@@ -112,18 +112,30 @@ Thumbs.db
 
 # Project specific
 models/weights/*.pt
+!models/weights/pothole_pretrained_95percent.pt  # Keep the working model
 models/yolo_training/
 runs/
 results/
 logs/*.log
 logs/*.db
 
+# Dataset files (large - don't track in Git)
+Datasets/
+data/
+*.cache
+
+# Large model files
+*.pt
+!models/weights/pothole_pretrained_95percent.pt  # Exception: keep working model
+yolov8n.pt
+
 # Large files
 *.zip
 *.tar.gz
 *.rar
 
-# Temporary
+# Temporary files
 *.tmp
 *.temp
 temp/
+CLEANUP_SUMMARY.md
