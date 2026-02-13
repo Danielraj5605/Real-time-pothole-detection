@@ -398,24 +398,175 @@ class DetectionPipeline:
 
 
 # =============================================================================
-# VISUALIZATION
+# VISUALIZATION & ANNOTATION
 # =============================================================================
 
-def draw_detections(frame: np.ndarray, potholes: List[PotholeInfo], fps: float) -> np.ndarray:
-    """Draw detection results on frame"""
-    display = frame.copy()
+# Severity colors (BGR format)
+SEVERITY_COLORS = {
+    'HIGH': (0, 0, 255),      # Red
+    'MEDIUM': (0, 165, 255),  # Orange
+    'LOW': (0, 255, 255),     # Yellow
+    'UNKNOWN': (128, 128, 128) # Gray
+}
+
+# Overlay colors for segmentation (BGR)
+OVERLAY_COLORS = {
+    'HIGH': (0, 0, 200),      # Dark Red
+    'MEDIUM': (0, 140, 200),  # Dark Orange
+    'LOW': (0, 200, 200),     # Dark Yellow
+}
+
+
+def create_pothole_mask(frame: np.ndarray, bbox: Tuple, padding: int = 5) -> np.ndarray:
+    """
+    Create a segmentation mask for a pothole region.
     
-    # Severity colors
-    colors = {
-        'HIGH': (0, 0, 255),      # Red
-        'MEDIUM': (0, 165, 255),  # Orange
-        'LOW': (0, 255, 255),     # Yellow
-        'UNKNOWN': (128, 128, 128)
-    }
+    Uses edge detection and morphological operations to create
+    a pixel-level mask that highlights the actual pothole area
+    within the bounding box.
+    """
+    x1, y1, x2, y2 = bbox
+    h, w = frame.shape[:2]
+    
+    # Ensure bounds
+    x1 = max(0, x1 - padding)
+    y1 = max(0, y1 - padding)
+    x2 = min(w, x2 + padding)
+    y2 = min(h, y2 + padding)
+    
+    # Extract region
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return np.zeros((h, w), dtype=np.uint8)
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    # Apply CLAHE for contrast
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    
+    # Detect dark regions (potholes are typically darker)
+    mean_val = np.mean(enhanced)
+    _, dark_mask = cv2.threshold(enhanced, mean_val * 0.7, 255, cv2.THRESH_BINARY_INV)
+    
+    # Edge detection
+    edges = cv2.Canny(enhanced, 50, 150)
+    
+    # Combine dark regions with edges
+    combined = cv2.bitwise_or(dark_mask, edges)
+    
+    # Morphological operations to clean up
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel)
+    combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
+    
+    # Fill holes
+    contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filled = np.zeros_like(combined)
+    if contours:
+        # Keep only the largest contour
+        largest = max(contours, key=cv2.contourArea)
+        cv2.drawContours(filled, [largest], -1, 255, -1)
+    
+    # Create full-size mask
+    full_mask = np.zeros((h, w), dtype=np.uint8)
+    full_mask[y1:y2, x1:x2] = filled
+    
+    return full_mask
+
+
+def annotate_image_with_segmentation(
+    frame: np.ndarray,
+    potholes: List[PotholeInfo],
+    overlay_alpha: float = 0.4,
+    show_labels: bool = True
+) -> np.ndarray:
+    """
+    Create annotated image with segmentation masks and bounding boxes.
+    
+    Features:
+    - Colored overlay segmentation masks for each pothole
+    - Clear bounding boxes with "Pothole" labels
+    - Severity-based color coding
+    - Semi-transparent overlays
+    """
+    display = frame.copy()
+    overlay = frame.copy()
+    
+    for pothole in potholes:
+        x1, y1, x2, y2 = pothole.bbox
+        severity = pothole.severity
+        color = SEVERITY_COLORS.get(severity, (0, 255, 0))
+        overlay_color = OVERLAY_COLORS.get(severity, (0, 180, 180))
+        
+        # Create segmentation mask for this pothole
+        mask = create_pothole_mask(frame, pothole.bbox)
+        
+        # Apply colored overlay where mask is active
+        colored_overlay = np.zeros_like(frame)
+        colored_overlay[:] = overlay_color
+        
+        # Blend overlay with original in masked region
+        mask_3ch = cv2.merge([mask, mask, mask])
+        overlay = np.where(mask_3ch > 0, 
+                          cv2.addWeighted(overlay, 1-overlay_alpha, colored_overlay, overlay_alpha, 0),
+                          overlay)
+        
+        # Draw bounding box (thick)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 3)
+        
+        # Draw corner accents
+        corner_len = min(20, (x2-x1)//4, (y2-y1)//4)
+        # Top-left
+        cv2.line(overlay, (x1, y1), (x1+corner_len, y1), color, 4)
+        cv2.line(overlay, (x1, y1), (x1, y1+corner_len), color, 4)
+        # Top-right
+        cv2.line(overlay, (x2, y1), (x2-corner_len, y1), color, 4)
+        cv2.line(overlay, (x2, y1), (x2, y1+corner_len), color, 4)
+        # Bottom-left
+        cv2.line(overlay, (x1, y2), (x1+corner_len, y2), color, 4)
+        cv2.line(overlay, (x1, y2), (x1, y2-corner_len), color, 4)
+        # Bottom-right
+        cv2.line(overlay, (x2, y2), (x2-corner_len, y2), color, 4)
+        cv2.line(overlay, (x2, y2), (x2, y2-corner_len), color, 4)
+        
+        if show_labels:
+            # Label: "Pothole" with severity and confidence
+            label = f"Pothole ({severity})"
+            conf_label = f"{pothole.confidence:.0%}"
+            
+            # Background for label
+            (w1, h1), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            (w2, h2), _ = cv2.getTextSize(conf_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            
+            label_bg_h = h1 + h2 + 15
+            label_bg_w = max(w1, w2) + 10
+            
+            # Position label above box
+            label_y = max(label_bg_h + 5, y1 - 5)
+            
+            cv2.rectangle(overlay, (x1, label_y - label_bg_h), 
+                         (x1 + label_bg_w, label_y), color, -1)
+            
+            # Main label
+            cv2.putText(overlay, label, (x1 + 5, label_y - h2 - 8),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+            # Confidence
+            cv2.putText(overlay, conf_label, (x1 + 5, label_y - 5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    
+    return overlay
+
+
+def draw_detections(frame: np.ndarray, potholes: List[PotholeInfo], fps: float) -> np.ndarray:
+    """Draw detection results on frame (for live view)"""
+    display = frame.copy()
     
     for p in potholes:
         x1, y1, x2, y2 = p.bbox
-        color = colors.get(p.severity, (0, 255, 0))
+        color = SEVERITY_COLORS.get(p.severity, (0, 255, 0))
         
         # Bounding box
         cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
@@ -820,6 +971,115 @@ def setup_logging(level: str = "INFO"):
     )
 
 
+def run_annotate_mode(config: Config, max_images: int = 20):
+    """
+    Process dataset images and generate annotated outputs with segmentation.
+    
+    Features:
+    - Processes images from Datasets folder
+    - Creates bounding boxes with "Pothole" labels
+    - Generates pixel-level segmentation masks
+    - Applies colored overlays for visualization
+    - Saves annotated images to results/annotated/
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 60)
+    logger.info("  POTHOLE ANNOTATION MODE")
+    logger.info("=" * 60)
+    logger.info("Generating annotated images with segmentation masks...")
+    logger.info("")
+    
+    # Initialize detector
+    detector = YOLODetector(config.model_path, config.confidence_threshold)
+    if not detector.initialize():
+        return
+    
+    pipeline = DetectionPipeline(detector, config)
+    
+    # Output directory
+    output_dir = PROJECT_ROOT / "results" / "annotated"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Find dataset images
+    dataset_paths = [
+        PROJECT_ROOT / "Datasets" / "train" / "images",
+        PROJECT_ROOT / "Datasets" / "val" / "images",
+        PROJECT_ROOT / "Datasets" / "images",
+    ]
+    
+    image_files = []
+    for dataset_path in dataset_paths:
+        if dataset_path.exists():
+            for ext in ['*.jpg', '*.jpeg', '*.png', '*.bmp']:
+                image_files.extend(list(dataset_path.glob(ext)))
+    
+    if not image_files:
+        logger.warning("No images found in Datasets folder!")
+        return
+    
+    # Limit images
+    image_files = image_files[:max_images]
+    logger.info(f"Processing {len(image_files)} images...")
+    logger.info(f"Output directory: {output_dir}")
+    logger.info("")
+    
+    processed = 0
+    total_potholes = 0
+    
+    for idx, image_path in enumerate(image_files):
+        try:
+            # Load image
+            frame = cv2.imread(str(image_path))
+            if frame is None:
+                continue
+            
+            # Process through pipeline
+            potholes = pipeline.process(frame, idx + 1)
+            
+            if potholes:
+                total_potholes += len(potholes)
+                
+                # Create annotated image with segmentation
+                annotated = annotate_image_with_segmentation(
+                    frame, potholes, overlay_alpha=0.4, show_labels=True
+                )
+                
+                # Save annotated image
+                output_path = output_dir / f"annotated_{image_path.stem}.jpg"
+                cv2.imwrite(str(output_path), annotated)
+                
+                logger.info(
+                    f"[{idx+1}/{len(image_files)}] {image_path.name}: "
+                    f"{len(potholes)} potholes -> {output_path.name}"
+                )
+                processed += 1
+            else:
+                logger.info(f"[{idx+1}/{len(image_files)}] {image_path.name}: No potholes detected")
+                
+        except Exception as e:
+            logger.error(f"Error processing {image_path.name}: {e}")
+            continue
+    
+    # Summary
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("  ANNOTATION COMPLETE")
+    logger.info("=" * 60)
+    logger.info(f"  Images Processed : {len(image_files)}")
+    logger.info(f"  Images Annotated : {processed}")
+    logger.info(f"  Total Potholes   : {total_potholes}")
+    logger.info(f"  Output Directory : {output_dir}")
+    logger.info("=" * 60)
+    logger.info("")
+    logger.info("Annotated images saved with:")
+    logger.info("  - Bounding boxes with 'Pothole' labels")
+    logger.info("  - Segmentation masks with colored overlays")
+    logger.info("  - Severity color coding (Red=HIGH, Orange=MEDIUM, Yellow=LOW)")
+    logger.info("")
+    logger.info("completed!")
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -834,11 +1094,17 @@ Pipeline Stages:
   5. Read Information - Feature extraction
   6. Identify         - Severity classification
 
+Modes:
+  Default             - Live camera detection
+  --test              - Process dataset with ML analysis
+  --annotate          - Generate annotated images with segmentation
+
 Examples:
   python pothole_detector.py                  # Run with webcam
   python pothole_detector.py --camera 1       # Use camera 1
-  python pothole_detector.py --save           # Save detections
-  python pothole_detector.py --test           # Test mode (no camera)
+  python pothole_detector.py --test           # Test with ML analysis
+  python pothole_detector.py --annotate       # Generate annotated images
+  python pothole_detector.py --annotate -n 50 # Annotate 50 images
         """
     )
     
@@ -847,7 +1113,9 @@ Examples:
     parser.add_argument('--confidence', type=float, default=0.25, help='Detection confidence')
     parser.add_argument('--save', action='store_true', help='Save detections')
     parser.add_argument('--no-tracking', action='store_true', help='Disable tracking')
-    parser.add_argument('--test', action='store_true', help='Test mode (no camera)')
+    parser.add_argument('--test', action='store_true', help='Test mode with ML analysis')
+    parser.add_argument('--annotate', action='store_true', help='Generate annotated images with segmentation')
+    parser.add_argument('-n', '--num-images', type=int, default=20, help='Number of images to annotate')
     parser.add_argument('--log-level', type=str, default='INFO', 
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     
@@ -863,17 +1131,20 @@ Examples:
         confidence_threshold=args.confidence,
         save_detections=args.save,
         enable_tracking=not args.no_tracking,
-        show_window=not args.test
+        show_window=not (args.test or args.annotate)
     )
     
-    # Run
-    app = PotholeDetector(config)
-    
-    if args.test:
+    # Run appropriate mode
+    if args.annotate:
+        run_annotate_mode(config, max_images=args.num_images)
+    elif args.test:
+        app = PotholeDetector(config)
         app.run_test()
     else:
+        app = PotholeDetector(config)
         app.run()
 
 
 if __name__ == "__main__":
     main()
+
