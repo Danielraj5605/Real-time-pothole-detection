@@ -10,7 +10,8 @@ Pipeline Stages:
 3. Track Object - Multi-object tracking
 4. Isolate - Region extraction
 5. Read Information - Feature extraction
-6. Identify - Classification
+6. Fuse - Vision + Accelerometer fusion
+7. Identify - Classification
 
 Usage:
     python pothole_detector.py                    # Run with webcam
@@ -34,6 +35,9 @@ from collections import deque
 # Setup project root
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Import accelerometer processor
+from accelerometer_processor import AccelerometerProcessor, AccelConfig, AccelFeatures
 
 
 # =============================================================================
@@ -64,6 +68,10 @@ class Config:
     save_detections: bool = False
     save_path: str = "results/detections"
     
+    # Accelerometer
+    enable_accelerometer: bool = True
+    accel_csv_path: str = ""  # CSV path for simulation mode
+    
 
 # =============================================================================
 # DATA STRUCTURES
@@ -88,6 +96,13 @@ class PotholeInfo:
     # Classification
     severity: str = "UNKNOWN"
     depth: str = "UNKNOWN"
+    
+    # Accelerometer fusion data
+    fusion_score: float = 0.0
+    accel_severity: str = "NONE"
+    accel_peak_g: float = 0.0
+    accel_rms_g: float = 0.0
+    has_accel_data: bool = False
     
     # Tracking
     track_length: int = 1
@@ -169,19 +184,22 @@ class YOLODetector:
 
 class DetectionPipeline:
     """
-    6-Stage Pothole Detection Pipeline
+    7-Stage Multimodal Pothole Detection Pipeline
     
     1. Clean Frames
     2. Find Object
     3. Track Object
     4. Isolate
     5. Read Information
-    6. Identify
+    6. Fuse (Vision + Accelerometer)
+    7. Identify
     """
     
-    def __init__(self, detector: YOLODetector, config: Config):
+    def __init__(self, detector: YOLODetector, config: Config,
+                 accel_processor: Optional[AccelerometerProcessor] = None):
         self.detector = detector
         self.config = config
+        self.accel_processor = accel_processor
         self.logger = logging.getLogger(__name__)
         
         # Tracking state
@@ -321,12 +339,31 @@ class DetectionPipeline:
             'center': ((x1 + x2) // 2, (y1 + y2) // 2)
         }
     
-    # Stage 6: Identify
-    def identify(self, features: Dict, confidence: float) -> Dict:
-        """Classify pothole severity and depth"""
+    # Stage 6: Fuse (Vision + Accelerometer)
+    def fuse(self, features: Dict, confidence: float) -> Dict:
+        """Fuse vision and accelerometer data for severity classification"""
         area_ratio = features.get('area_ratio', 0)
         
-        # Severity based on size and confidence
+        # If accelerometer processor is available, use fusion
+        if self.accel_processor and self.accel_processor.is_initialized:
+            # Extract latest accelerometer features
+            accel_features = self.accel_processor.extract_features()
+            
+            # Run fusion classification
+            result = self.accel_processor.fuse_severity(
+                vision_confidence=confidence,
+                vision_area_ratio=area_ratio,
+                accel_features=accel_features
+            )
+            return result
+        
+        # Fallback: vision-only classification (no accelerometer)
+        return self._vision_only_classify(features, confidence)
+    
+    def _vision_only_classify(self, features: Dict, confidence: float) -> Dict:
+        """Fallback: classify using vision data only"""
+        area_ratio = features.get('area_ratio', 0)
+        
         if confidence > 0.7 and area_ratio > 0.1:
             severity = "HIGH"
         elif confidence > 0.5 or area_ratio > 0.05:
@@ -334,7 +371,6 @@ class DetectionPipeline:
         else:
             severity = "LOW"
         
-        # Depth estimate
         if area_ratio > 0.15:
             depth = "DEEP"
         elif area_ratio > 0.08:
@@ -342,7 +378,17 @@ class DetectionPipeline:
         else:
             depth = "SHALLOW"
         
-        return {'severity': severity, 'depth': depth}
+        return {
+            'severity': severity, 'depth': depth,
+            'fusion_score': 0.0, 'accel_severity': 'NONE',
+            'accel_peak_g': 0.0, 'accel_rms_g': 0.0,
+            'has_accel_data': False,
+        }
+    
+    # Stage 7: Identify (post-fusion)
+    def identify(self, fusion_result: Dict) -> Dict:
+        """Return final classification from fusion result"""
+        return fusion_result
     
     # Complete Pipeline
     def process(self, frame: np.ndarray, frame_num: int) -> List[PotholeInfo]:
@@ -373,8 +419,11 @@ class DetectionPipeline:
             # Stage 5: Read Info
             features = self.read_info(frame, bbox)
             
-            # Stage 6: Identify
-            classification = self.identify(features, conf)
+            # Stage 6: Fuse (Vision + Accelerometer)
+            fusion_result = self.fuse(features, conf)
+            
+            # Stage 7: Identify
+            classification = self.identify(fusion_result)
             
             pothole = PotholeInfo(
                 track_id=det.get('track_id', 0),
@@ -389,6 +438,11 @@ class DetectionPipeline:
                 area_ratio=features['area_ratio'],
                 severity=classification['severity'],
                 depth=classification['depth'],
+                fusion_score=classification.get('fusion_score', 0.0),
+                accel_severity=classification.get('accel_severity', 'NONE'),
+                accel_peak_g=classification.get('accel_peak_g', 0.0),
+                accel_rms_g=classification.get('accel_rms_g', 0.0),
+                has_accel_data=classification.get('has_accel_data', False),
                 track_length=det.get('track_length', 1),
                 isolated=isolated
             )
@@ -607,6 +661,7 @@ class PotholeDetector:
         self.detector = YOLODetector(config.model_path, config.confidence_threshold)
         self.pipeline: Optional[DetectionPipeline] = None
         self.camera: Optional[cv2.VideoCapture] = None
+        self.accel_processor: Optional[AccelerometerProcessor] = None
         
         # Stats
         self.frame_count = 0
@@ -623,9 +678,19 @@ class PotholeDetector:
         if not self.detector.initialize():
             return False
         
-        # Create pipeline
-        self.pipeline = DetectionPipeline(self.detector, self.config)
-        self.logger.info("[OK] Pipeline created")
+        # Initialize accelerometer processor
+        if self.config.enable_accelerometer:
+            accel_config = AccelConfig.from_config_json()
+            self.accel_processor = AccelerometerProcessor(accel_config)
+            if self.config.accel_csv_path:
+                self.accel_processor.initialize(csv_path=self.config.accel_csv_path)
+            else:
+                self.accel_processor.initialize()
+            self.logger.info("[OK] Accelerometer processor ready")
+        
+        # Create pipeline (with accelerometer if available)
+        self.pipeline = DetectionPipeline(self.detector, self.config, self.accel_processor)
+        self.logger.info("[OK] Pipeline created (7-stage multimodal)")
         
         # Initialize camera
         if self.config.show_window:
@@ -679,7 +744,8 @@ class PotholeDetector:
         
         self.is_running = True
         self.logger.info("")
-        self.logger.info("Pipeline: Clean -> Find -> Track -> Isolate -> Read -> Identify")
+        pipeline_label = "Clean -> Find -> Track -> Isolate -> Read -> Fuse -> Identify"
+        self.logger.info(f"Pipeline: {pipeline_label}")
         self.logger.info("Press 'q' to quit, 's' to save frame")
         self.logger.info("")
         
@@ -697,9 +763,12 @@ class PotholeDetector:
                 
                 # Log detections
                 for p in potholes:
+                    accel_info = ""
+                    if p.has_accel_data:
+                        accel_info = f" | Accel:{p.accel_peak_g:.2f}G | Fusion:{p.fusion_score:.2f}"
                     self.logger.info(
                         f"POTHOLE | ID:{p.track_id} | {p.severity} | "
-                        f"Depth:{p.depth} | Conf:{p.confidence:.0%} | Size:{p.area_ratio:.1%}"
+                        f"Depth:{p.depth} | Conf:{p.confidence:.0%} | Size:{p.area_ratio:.1%}{accel_info}"
                     )
                 
                 # Calculate FPS
@@ -1116,6 +1185,8 @@ Examples:
     parser.add_argument('--test', action='store_true', help='Test mode with ML analysis')
     parser.add_argument('--annotate', action='store_true', help='Generate annotated images with segmentation')
     parser.add_argument('-n', '--num-images', type=int, default=20, help='Number of images to annotate')
+    parser.add_argument('--accel-csv', type=str, default='', help='Accelerometer CSV file for fusion')
+    parser.add_argument('--no-accel', action='store_true', help='Disable accelerometer fusion')
     parser.add_argument('--log-level', type=str, default='INFO', 
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     
@@ -1131,7 +1202,9 @@ Examples:
         confidence_threshold=args.confidence,
         save_detections=args.save,
         enable_tracking=not args.no_tracking,
-        show_window=not (args.test or args.annotate)
+        show_window=not (args.test or args.annotate),
+        enable_accelerometer=not args.no_accel,
+        accel_csv_path=args.accel_csv,
     )
     
     # Run appropriate mode
