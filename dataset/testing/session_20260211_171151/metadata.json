@@ -1,0 +1,33 @@
+{
+  "session_id": "session_20260211_171151",
+  "start_time": "2026-02-11T17:11:55.038489",
+  "end_time": "2026-02-11T17:13:11.266621",
+  "duration_seconds": 76.228132,
+  "total_accel_samples": 7543,
+  "total_gps_samples": 0,
+  "total_labels": 0,
+  "sensor_config": {
+    "camera": {
+      "resolution": "1280x960",
+      "framerate": 30,
+      "codec": "h264",
+      "bitrate": 8000000
+    },
+    "accelerometer": {
+      "sample_rate_hz": 100,
+      "accel_range_g": 16,
+      "gyro_range_dps": 2000
+    },
+    "gps": {
+      "sample_rate_hz": 1
+    }
+  },
+  "video_start_offset_ms": 17,
+  "T0_ns": 1513818750795,
+  "T0_epoch": 1770810112.0275881,
+  "camera_start_ns": 150000000,
+  "accel_start_ns": 3024016859,
+  "stabilization_duration_ns": 3006827574,
+  "video_process_start_epoch": 1770810112.0275881,
+  "video_recording_start_epoch": 1770810115.0344346
+}
