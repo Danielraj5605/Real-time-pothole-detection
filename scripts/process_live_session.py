@@ -379,6 +379,79 @@ class LiveSessionProcessor:
         
         return report
     
+    def refine_bounding_box(self, frame, x1, y1, x2, y2):
+        """
+        Refine bounding box to focus on the pothole (dark blob)
+        instead of the entire road surface.
+        """
+        # Safety check
+        if x1 >= x2 or y1 >= y2: 
+            return (x1, y1, x2, y2)
+            
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0: 
+            return (x1, y1, x2, y2)
+            
+        # 1. Convert to gray
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        
+        # 2. Gaussian Blur to reduce noise (asphalt texture)
+        blurred = cv2.GaussianBlur(gray, (21, 21), 0)
+        
+        # 3. Find darkest regions (potholes are shadows/holes)
+        # Use dynamic threshold based on min/max intensity in the ROI
+        min_val, max_val, _, _ = cv2.minMaxLoc(blurred)
+        
+        # Threshold: Pickup pixels in the bottom 40% of brightness range
+        thresh_val = min_val + (max_val - min_val) * 0.4
+        _, thresh = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
+        
+        # 4. Find contours of dark spots
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        refined_box = None
+        
+        if contours:
+            # Find largest contour
+            largest_cnt = max(contours, key=cv2.contourArea)
+            
+            # Simple bounding rect of the "dark blob"
+            rx, ry, rw, rh = cv2.boundingRect(largest_cnt)
+            
+            # Filter: Is this blob significant? (>5% of ROI)
+            roi_area = (x2 - x1) * (y2 - y1)
+            blob_area = rw * rh
+            
+            if blob_area > roi_area * 0.05:
+                # Add 10% padding
+                pad_x = int(rw * 0.1)
+                pad_y = int(rh * 0.1)
+                
+                nx1 = x1 + rx - pad_x
+                ny1 = y1 + ry - pad_y
+                nx2 = x1 + rx + rw + pad_x
+                ny2 = y1 + ry + rh + pad_y
+                
+                # Clip to original box (don't detect outside YOLO proposal)
+                refined_box = (
+                    max(x1, nx1), max(y1, ny1),
+                    min(x2, nx2), min(y2, ny2)
+                )
+
+        if refined_box is None:
+            # Fallback 1: Center-Center Crop
+            # If no distinct features found, assume detection is generally accurate 
+            # but too loose. Shrink to center 50%.
+            w, h = x2 - x1, y2 - y1
+            cx, cy = x1 + w//2, y1 + h//2
+            new_w, new_h = int(w * 0.5), int(h * 0.5)
+            refined_box = (
+                cx - new_w//2, cy - new_h//2,
+                cx + new_w//2, cy + new_h//2
+            )
+            
+        return refined_box
+
     def create_annotated_video(self, output_path: str = None, max_events: int = 20, 
                               last_n_minutes: float = 2.0, vision_only: bool = True):
         """Create video clips of detected potholes with annotations matching test results style"""
@@ -415,7 +488,7 @@ class LiveSessionProcessor:
         events_to_process = filtered_events[:max_events]
         
         print(f"Creating clips for {len(events_to_process)} events...")
-        print("Style: Blue boxes with 'Potholes' labels (matching test results)")
+        print("Style: Refined Blue boxes (Tightened via Computer Vision)")
         print()
         
         # Show event details
@@ -462,12 +535,18 @@ class LiveSessionProcessor:
                 if show_detection and event.has_vision_detection:
                     x1, y1, x2, y2 = event.vision_bbox
                     
+                    # --- NEW: Apply Refinement ---
+                    # We shrink the user's "big box" to a "tight box" using our helper
+                    rx1, ry1, rx2, ry2 = self.refine_bounding_box(
+                        frame, x1, y1, x2, y2
+                    )
+                    
                     # Use BLUE color to match test results style
                     color = (255, 0, 0)  # Blue in BGR
                     thickness = 3
                     
-                    # Draw bounding box
-                    cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
+                    # Draw bounding box (Use Refined Coordinates!)
+                    cv2.rectangle(annotated, (rx1, ry1), (rx2, ry2), color, thickness)
                     
                     # Create label matching test results: "Potholes 0.XX"
                     label = f"Potholes {event.vision_confidence:.2f}"
@@ -481,11 +560,12 @@ class LiveSessionProcessor:
                     )
                     
                     # Draw label background (blue)
-                    label_y = y1 - 10 if y1 > 30 else y1 + label_height + 10
+                    # Position relative to refined box
+                    label_y = ry1 - 10 if ry1 > 30 else ry1 + label_height + 10
                     cv2.rectangle(
                         annotated,
-                        (x1, label_y - label_height - 5),
-                        (x1 + label_width + 10, label_y + baseline),
+                        (rx1, label_y - label_height - 5),
+                        (rx1 + label_width + 10, label_y + baseline),
                         color,
                         -1  # Filled
                     )
@@ -494,7 +574,7 @@ class LiveSessionProcessor:
                     cv2.putText(
                         annotated,
                         label,
-                        (x1 + 5, label_y - 5),
+                        (rx1 + 5, label_y - 5),
                         font,
                         font_scale,
                         (255, 255, 255),  # White text
@@ -515,7 +595,7 @@ class LiveSessionProcessor:
                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                     
                     # Sensor data
-                    sensor_text = f"Accel: {event.accel_peak_g:.2f}G | Fusion Score: {event.fusion_score:.2f}"
+                    sensor_text = f"Accel: {event.accel_peak_g:.2f}G | Fusion Score: {event.fusion_score:.2f} | BBox Refined"
                     cv2.putText(annotated, sensor_text, (20, 50), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
                 
